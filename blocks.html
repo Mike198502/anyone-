@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>积木岛</title>
+<style>
+  :root { --ui-bg: rgba(255,253,248,.92); --ui-fg:#2b2a27; --ui-muted:#6f6b62; --accent:#3a7d44; --slot:rgba(0,0,0,.35); --slot-on:#fff; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --ui-bg: rgba(30,32,35,.92); --ui-fg:#ece9e3; --ui-muted:#a29e95; --accent:#6cc47a; }
+  }
+  :root[data-theme="dark"] { --ui-bg: rgba(30,32,35,.92); --ui-fg:#ece9e3; --ui-muted:#a29e95; --accent:#6cc47a; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; height:100%; overflow:hidden; background:#9fd3f0;
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif; user-select:none; -webkit-user-select:none; }
+  canvas { display:block; touch-action:none; }
+  #cross { position:fixed; left:50%; top:50%; width:18px; height:18px; transform:translate(-50%,-50%); pointer-events:none; }
+  #cross::before,#cross::after { content:""; position:absolute; background:#fff; mix-blend-mode:difference; }
+  #cross::before { left:8px; top:0; width:2px; height:18px; }
+  #cross::after { top:8px; left:0; height:2px; width:18px; }
+  #hotbar { position:fixed; left:50%; bottom:14px; transform:translateX(-50%); display:flex; gap:4px; padding:4px;
+    background:var(--slot); border-radius:8px; }
+  #hotbar div { width:42px; height:42px; border-radius:5px; border:2px solid transparent; position:relative; cursor:pointer; }
+  #hotbar div.on { border-color:var(--slot-on); box-shadow:0 0 0 1px #000; }
+  #hotbar span { position:absolute; left:3px; top:1px; font-size:10px; color:#fff; text-shadow:0 0 2px #000; }
+  #name { position:fixed; left:50%; bottom:72px; transform:translateX(-50%); color:#fff; font-size:14px;
+    text-shadow:0 1px 3px rgba(0,0,0,.6); transition:opacity .4s; pointer-events:none; }
+  #ov { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,.35); padding:16px; }
+  #ov.hidden { display:none; }
+  .card { background:var(--ui-bg); color:var(--ui-fg); border-radius:14px; padding:24px 26px; max-width:380px; width:100%; text-align:center; }
+  .card h1 { margin:0 0 6px; font-size:26px; letter-spacing:3px; }
+  .card p { margin:0 0 16px; color:var(--ui-muted); font-size:14px; }
+  .card table { margin:0 auto 18px; font-size:14px; text-align:left; border-spacing:10px 4px; }
+  .card td:first-child { color:var(--ui-muted); white-space:nowrap; }
+  .card button { font:inherit; font-size:16px; border:0; border-radius:8px; padding:10px 28px; background:var(--accent); color:#fff; cursor:pointer; }
+  /* 触屏控件 */
+  body:not(.mobile) .touch { display:none !important; }
+  body.mobile .desk { display:none; }
+  #stick { position:fixed; left:20px; bottom:80px; width:120px; height:120px; border-radius:50%; background:rgba(255,255,255,.18); border:2px solid rgba(255,255,255,.4); }
+  #knob { position:absolute; left:50%; top:50%; width:50px; height:50px; margin:-25px 0 0 -25px; border-radius:50%; background:rgba(255,255,255,.6); }
+  .tbtn { position:fixed; width:62px; height:62px; border-radius:50%; background:rgba(255,255,255,.25); border:2px solid rgba(255,255,255,.5);
+    color:#fff; font-size:15px; display:flex; align-items:center; justify-content:center; text-shadow:0 1px 2px #000; }
+  #bJump { right:20px; bottom:90px; }
+  #bBreak { right:92px; bottom:150px; }
+  #bPlace { right:20px; bottom:170px; }
+  .tbtn.down { background:rgba(255,255,255,.5); }
+  #pauseBtn { position:fixed; right:12px; top:12px; width:40px; height:40px; border-radius:8px; background:rgba(0,0,0,.3); color:#fff;
+    display:flex; align-items:center; justify-content:center; font-size:16px; }
+</style>
+</head>
+<body>
+<div id="cross"></div>
+<div id="hotbar"></div>
+<div id="name"></div>
+
+<div class="touch" id="stick"><div id="knob"></div></div>
+<div class="touch tbtn" id="bJump">跳</div>
+<div class="touch tbtn" id="bBreak">挖</div>
+<div class="touch tbtn" id="bPlace">放</div>
+<div class="touch" id="pauseBtn">Ⅱ</div>
+
+<div id="ov">
+  <div class="card">
+    <h1>积木岛</h1>
+    <p id="sub">在一座随机生成的小岛上挖方块、盖房子</p>
+    <table class="desk">
+      <tr><td>移动</td><td>W A S D，空格跳</td></tr>
+      <tr><td>视角</td><td>移动鼠标</td></tr>
+      <tr><td>挖 / 放</td><td>鼠标左键 / 右键</td></tr>
+      <tr><td>选方块</td><td>数字键 1–8 或滚轮</td></tr>
+      <tr><td>暂停</td><td>Esc</td></tr>
+    </table>
+    <table class="touch">
+      <tr><td>移动</td><td>左下摇杆</td></tr>
+      <tr><td>视角</td><td>在屏幕右侧拖动</td></tr>
+      <tr><td>挖 / 放 / 跳</td><td>右侧按钮</td></tr>
+      <tr><td>选方块</td><td>点底部格子</td></tr>
+    </table>
+    <button id="go">开始</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(() => {
+  // ---------- 方块定义 ----------
+  // [名字, 顶面, 侧面, 底面]
+  const BLOCKS = [null,
+    ['草地', '#67a33f', '#86703f', '#7a5a35'],
+    ['泥土', '#7a5a35', '#7a5a35', '#7a5a35'],
+    ['石头', '#8a8d91', '#8a8d91', '#8a8d91'],
+    ['沙子', '#e0cf8f', '#e0cf8f', '#e0cf8f'],
+    ['原木', '#b08a55', '#6b4a2b', '#b08a55'],
+    ['树叶', '#3f7f34', '#3f7f34', '#3f7f34'],
+    ['木板', '#c19a5b', '#c19a5b', '#c19a5b'],
+    ['砖块', '#a64b3c', '#a64b3c', '#a64b3c'],
+  ];
+  const RGB = BLOCKS.map(b => b && b.slice(1).map(h => new THREE.Color(h)));
+
+  // ---------- 世界数据 ----------
+  const W = 48, D = 48, H = 24;
+  const world = new Uint8Array(W * H * D);
+  const idx = (x, y, z) => x + W * (z + D * y);
+  const inside = (x, y, z) => x >= 0 && y >= 0 && z >= 0 && x < W && y < H && z < D;
+  const getB = (x, y, z) => inside(x, y, z) ? world[idx(x, y, z)] : 0;
+  // 物理上：脚下 y<0 和四周边界都算实心，防止掉出世界
+  const solid = (x, y, z) => y < 0 || x < 0 || z < 0 || x >= W || z >= D ? true : y >= H ? false : world[idx(x, y, z)] > 0;
+
+  const seed = (Math.random() * 1e9) | 0;
+  function hash(x, z) {
+    let h = Math.imul(x, 374761393) ^ Math.imul(z, 668265263) ^ Math.imul(seed, 1442695041);
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+  }
+  function noise(x, z) {            // 平滑的值噪声
+    const xi = Math.floor(x), zi = Math.floor(z), xf = x - xi, zf = z - zi;
+    const u = xf * xf * (3 - 2 * xf), v = zf * zf * (3 - 2 * zf);
+    const a = hash(xi, zi), b = hash(xi + 1, zi), c = hash(xi, zi + 1), d = hash(xi + 1, zi + 1);
+    return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+  }
+
+  const heights = [];
+  for (let x = 0; x < W; x++) for (let z = 0; z < D; z++) {
+    // 中间高、边缘低，形成小岛
+    const dx = (x - W / 2) / (W / 2), dz = (z - D / 2) / (D / 2);
+    const island = 1 - Math.min(1, Math.sqrt(dx * dx + dz * dz));
+    let h = Math.floor(3 + island * 6 + noise(x / 10, z / 10) * 7 + noise(x / 4, z / 4) * 2);
+    h = Math.max(2, Math.min(H - 8, h));
+    heights[x * D + z] = h;
+    for (let y = 0; y <= h; y++) {
+      let b = 3;
+      if (y === h) b = h <= 5 ? 4 : 1;
+      else if (y >= h - 2) b = h <= 5 ? 4 : 2;
+      world[idx(x, y, z)] = b;
+    }
+  }
+  // 种树
+  for (let x = 3; x < W - 3; x++) for (let z = 3; z < D - 3; z++) {
+    const h = heights[x * D + z];
+    if (Math.abs(x - W / 2) < 5 && Math.abs(z - D / 2) < 5) continue;   // 出生点附近留空地
+    if (world[idx(x, h, z)] !== 1 || hash(x * 3 + 1, z * 7 + 2) > 0.025) continue;
+    const t = 4 + Math.floor(hash(x, z + 99) * 2);
+    for (let ly = h + t - 2; ly <= h + t + 1; ly++) {
+      const r = ly > h + t ? 1 : 2;
+      for (let lx = -r; lx <= r; lx++) for (let lz = -r; lz <= r; lz++) {
+        if (r === 2 && Math.abs(lx) === 2 && Math.abs(lz) === 2) continue;
+        if (inside(x + lx, ly, z + lz) && !getB(x + lx, ly, z + lz)) world[idx(x + lx, ly, z + lz)] = 6;
+      }
+    }
+    for (let y = h + 1; y <= h + t; y++) if (inside(x, y, z)) world[idx(x, y, z)] = 5;
+  }
+
+  // ---------- 渲染 ----------
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+  document.body.prepend(renderer.domElement);
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color('#9fd3f0');
+  scene.fog = new THREE.Fog('#9fd3f0', 25, 70);
+  const camera = new THREE.PerspectiveCamera(75, 1, 0.05, 200);
+  camera.rotation.order = 'YXZ';
+
+  // 海面（装饰）
+  const sea = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshBasicMaterial({ color: '#4f8fc7' }));
+  sea.rotation.x = -Math.PI / 2; sea.position.set(W / 2, 3.6, D / 2);
+  scene.add(sea);
+
+  // 每个面：法线方向、四个角（逆时针）、明暗系数
+  const FACES = [
+    { d: [1, 0, 0],  c: [[1,0,1],[1,0,0],[1,1,0],[1,1,1]], s: .80, t: 1 },
+    { d: [-1, 0, 0], c: [[0,0,0],[0,0,1],[0,1,1],[0,1,0]], s: .80, t: 1 },
+    { d: [0, 1, 0],  c: [[0,1,1],[1,1,1],[1,1,0],[0,1,0]], s: 1.0, t: 0 },
+    { d: [0, -1, 0], c: [[0,0,0],[1,0,0],[1,0,1],[0,0,1]], s: .55, t: 2 },
+    { d: [0, 0, 1],  c: [[0,0,1],[1,0,1],[1,1,1],[0,1,1]], s: .90, t: 1 },
+    { d: [0, 0, -1], c: [[1,0,0],[0,0,0],[0,1,0],[1,1,0]], s: .70, t: 1 },
+  ];
+  const material = new THREE.MeshBasicMaterial({ vertexColors: true });
+  let mesh = null;
+
+  function buildMesh() {
+    const pos = [], col = [];
+    for (let y = 0; y < H; y++) for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) {
+      const b = world[idx(x, y, z)];
+      if (!b) continue;
+      const jitter = 0.93 + hash(x * 31 + y, z * 17 - y) * 0.12;   // 每块轻微色差，增加质感
+      for (const f of FACES) {
+        const nx = x + f.d[0], ny = y + f.d[1], nz = z + f.d[2];
+        if (ny < 0 || getB(nx, ny, nz)) continue;   // 被挡住的面不画
+        const c = RGB[b][f.t], k = f.s * jitter;
+        const v = f.c.map(p => [x + p[0], y + p[1], z + p[2]]);
+        for (const i of [0, 1, 2, 0, 2, 3]) {
+          pos.push(v[i][0], v[i][1], v[i][2]);
+          col.push(c.r * k, c.g * k, c.b * k);
+        }
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    if (mesh) { mesh.geometry.dispose(); scene.remove(mesh); }
+    mesh = new THREE.Mesh(g, material);
+    scene.add(mesh);
+  }
+  buildMesh();
+
+  const outline = new THREE.LineSegments(
+    new THREE.EdgesGeometry(new THREE.BoxGeometry(1.004, 1.004, 1.004)),
+    new THREE.LineBasicMaterial({ color: 0x000000 }));
+  outline.visible = false;
+  scene.add(outline);
+
+  // ---------- 玩家 ----------
+  const R = 0.3, TALL = 1.8, EYE = 1.62;
+  // 出生在岛中央那一列最高的方块上面（避免卡进树里）
+  let spawnY = H - 1; while (spawnY > 0 && !getB(W / 2, spawnY - 1, D / 2)) spawnY--;
+  const P = { x: W / 2 + .5, y: spawnY, z: D / 2 + .5, vy: 0, ground: false };
+  let yaw = Math.PI / 4, pitch = -0.2;
+
+  function hitsWorld(x, y, z) {
+    for (let xi = Math.floor(x - R); xi <= Math.floor(x + R - 1e-6); xi++)
+      for (let yi = Math.floor(y); yi <= Math.floor(y + TALL - 1e-6); yi++)
+        for (let zi = Math.floor(z - R); zi <= Math.floor(z + R - 1e-6); zi++)
+          if (solid(xi, yi, zi)) return true;
+    return false;
+  }
+
+  // 沿一个轴移动；撞到就贴住方块表面
+  function moveAxis(axis, d) {
+    if (!d) return;
+    P[axis] += d;
+    if (!hitsWorld(P.x, P.y, P.z)) { if (axis === 'y') P.ground = false; return; }
+    if (axis === 'y') {
+      if (d < 0) { P.y = Math.floor(P.y) + 1; P.ground = true; }
+      else P.y = Math.floor(P.y + TALL) - TALL - 1e-3;
+      P.vy = 0;
+    } else {
+      P[axis] = d > 0 ? Math.floor(P[axis] + R) - R - 1e-3 : Math.floor(P[axis] - R) + 1 + R + 1e-3;
+    }
+  }
+
+  // ---------- 输入 ----------
+  const keys = {};
+  const move = { x: 0, z: 0 };   // 触屏摇杆
+  let jumpHeld = false, playing = false, current = 1;
+  const mobile = matchMedia('(pointer: coarse)').matches;
+  if (mobile) document.body.classList.add('mobile');
+
+  // 快捷栏
+  const hotbar = document.getElementById('hotbar'), nameEl = document.getElementById('name');
+  let nameTimer;
+  BLOCKS.forEach((b, i) => {
+    if (!b) return;
+    const s = document.createElement('div');
+    s.style.background = `linear-gradient(${b[1]} 0 35%, ${b[2]} 35%)`;
+    s.innerHTML = `<span>${i}</span>`;
+    s.addEventListener('pointerdown', e => { e.stopPropagation(); select(i); });
+    hotbar.appendChild(s);
+  });
+  function select(i) {
+    current = i;
+    [...hotbar.children].forEach((s, k) => s.classList.toggle('on', k === i - 1));
+    nameEl.textContent = BLOCKS[i][0]; nameEl.style.opacity = 1;
+    clearTimeout(nameTimer); nameTimer = setTimeout(() => nameEl.style.opacity = 0, 1200);
+  }
+  select(1);
+
+  // 射线检测（逐格步进），返回瞄准的方块和它前面那一格
+  function raycast() {
+    const o = camera.position, d = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+    let x = Math.floor(o.x), y = Math.floor(o.y), z = Math.floor(o.z);
+    const sx = Math.sign(d.x), sy = Math.sign(d.y), sz = Math.sign(d.z);
+    const tdx = Math.abs(1 / d.x), tdy = Math.abs(1 / d.y), tdz = Math.abs(1 / d.z);
+    let tx = sx > 0 ? (x + 1 - o.x) * tdx : sx < 0 ? (o.x - x) * tdx : Infinity;
+    let ty = sy > 0 ? (y + 1 - o.y) * tdy : sy < 0 ? (o.y - y) * tdy : Infinity;
+    let tz = sz > 0 ? (z + 1 - o.z) * tdz : sz < 0 ? (o.z - z) * tdz : Infinity;
+    let prev = null, t = 0;
+    while (t <= 6) {
+      if (getB(x, y, z)) return { hit: [x, y, z], prev };
+      prev = [x, y, z];
+      if (tx < ty && tx < tz) { x += sx; t = tx; tx += tdx; }
+      else if (ty < tz) { y += sy; t = ty; ty += tdy; }
+      else { z += sz; t = tz; tz += tdz; }
+    }
+    return null;
+  }
+
+  function breakBlock() {
+    const r = raycast(); if (!r) return;
+    world[idx(...r.hit)] = 0; buildMesh();
+  }
+  function placeBlock() {
+    const r = raycast(); if (!r || !r.prev) return;
+    const [x, y, z] = r.prev;
+    if (!inside(x, y, z) || getB(x, y, z)) return;
+    // 不能把方块放在自己身上
+    const overlap = x < P.x + R && x + 1 > P.x - R && z < P.z + R && z + 1 > P.z - R && y < P.y + TALL && y + 1 > P.y;
+    if (overlap) return;
+    world[idx(x, y, z)] = current; buildMesh();
+  }
+
+  const ov = document.getElementById('ov'), canvas = renderer.domElement;
+  function startPlay() {
+    if (mobile) { playing = true; ov.classList.add('hidden'); }
+    else canvas.requestPointerLock();
+  }
+  document.getElementById('go').onclick = startPlay;
+  document.addEventListener('pointerlockchange', () => {
+    playing = document.pointerLockElement === canvas;
+    ov.classList.toggle('hidden', playing);
+    if (!playing) { document.getElementById('sub').textContent = '已暂停'; document.getElementById('go').textContent = '继续'; for (const k in keys) keys[k] = false; }
+  });
+
+  // 桌面
+  document.addEventListener('keydown', e => {
+    keys[e.code] = true;
+    if (/^Digit[1-8]$/.test(e.code)) select(+e.code.slice(5));
+    if (e.code === 'Space') e.preventDefault();
+  });
+  document.addEventListener('keyup', e => keys[e.code] = false);
+  document.addEventListener('mousemove', e => {
+    if (!playing || mobile) return;
+    yaw -= e.movementX * 0.0025;
+    pitch = Math.max(-1.55, Math.min(1.55, pitch - e.movementY * 0.0025));
+  });
+  canvas.addEventListener('mousedown', e => {
+    if (!playing || mobile) return;
+    if (e.button === 0) breakBlock(); else if (e.button === 2) placeBlock();
+  });
+  document.addEventListener('contextmenu', e => e.preventDefault());
+  document.addEventListener('wheel', e => {
+    if (!playing) return;
+    select(((current - 1 + (e.deltaY > 0 ? 1 : -1)) + 8) % 8 + 1);
+  });
+
+  // 触屏
+  if (mobile) {
+    const stick = document.getElementById('stick'), knob = document.getElementById('knob');
+    let stickId = null, sx0 = 0, sy0 = 0, lookId = null, lx = 0, ly = 0;
+    stick.addEventListener('touchstart', e => {
+      const t = e.changedTouches[0]; stickId = t.identifier;
+      const r = stick.getBoundingClientRect(); sx0 = r.left + r.width / 2; sy0 = r.top + r.height / 2;
+      e.preventDefault();
+    }, { passive: false });
+    canvas.addEventListener('touchstart', e => {
+      for (const t of e.changedTouches) if (lookId === null) { lookId = t.identifier; lx = t.clientX; ly = t.clientY; }
+      e.preventDefault();
+    }, { passive: false });
+    document.addEventListener('touchmove', e => {
+      for (const t of e.changedTouches) {
+        if (t.identifier === stickId) {
+          let dx = (t.clientX - sx0) / 50, dy = (t.clientY - sy0) / 50;
+          const m = Math.hypot(dx, dy); if (m > 1) { dx /= m; dy /= m; }
+          move.x = dx; move.z = dy;
+          knob.style.transform = `translate(${dx * 35}px, ${dy * 35}px)`;
+        } else if (t.identifier === lookId) {
+          yaw -= (t.clientX - lx) * 0.006;
+          pitch = Math.max(-1.55, Math.min(1.55, pitch - (t.clientY - ly) * 0.006));
+          lx = t.clientX; ly = t.clientY;
+        }
+      }
+      e.preventDefault();
+    }, { passive: false });
+    const end = e => {
+      for (const t of e.changedTouches) {
+        if (t.identifier === stickId) { stickId = null; move.x = move.z = 0; knob.style.transform = ''; }
+        if (t.identifier === lookId) lookId = null;
+      }
+    };
+    document.addEventListener('touchend', end); document.addEventListener('touchcancel', end);
+
+    const btn = (id, down, up) => {
+      const el = document.getElementById(id);
+      el.addEventListener('touchstart', e => { e.preventDefault(); e.stopPropagation(); el.classList.add('down'); down(); }, { passive: false });
+      el.addEventListener('touchend', e => { e.preventDefault(); el.classList.remove('down'); up && up(); }, { passive: false });
+    };
+    btn('bJump', () => jumpHeld = true, () => jumpHeld = false);
+    btn('bBreak', breakBlock);
+    btn('bPlace', placeBlock);
+    btn('pauseBtn', () => {
+      playing = false; ov.classList.remove('hidden');
+      document.getElementById('sub').textContent = '已暂停'; document.getElementById('go').textContent = '继续';
+    });
+  }
+
+  // ---------- 主循环 ----------
+  function resize() {
+    renderer.setSize(innerWidth, innerHeight);
+    camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  }
+  addEventListener('resize', resize); resize();
+
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    if (playing) {
+      let fx = 0, fz = 0;
+      if (keys.KeyW || keys.ArrowUp) fz -= 1;
+      if (keys.KeyS || keys.ArrowDown) fz += 1;
+      if (keys.KeyA || keys.ArrowLeft) fx -= 1;
+      if (keys.KeyD || keys.ArrowRight) fx += 1;
+      fx += move.x; fz += move.z;
+      const m = Math.hypot(fx, fz); if (m > 1) { fx /= m; fz /= m; }
+      const speed = 4.5, sin = Math.sin(yaw), cos = Math.cos(yaw);
+      const vx = (fx * cos + fz * sin) * speed, vz = (-fx * sin + fz * cos) * speed;
+
+      if ((keys.Space || jumpHeld) && P.ground) { P.vy = 8; P.ground = false; }
+      P.vy = Math.max(-30, P.vy - 24 * dt);
+
+      // 拆成小步移动，避免一帧走太远穿墙
+      const steps = Math.ceil(Math.max(Math.abs(vx), Math.abs(P.vy), Math.abs(vz)) * dt / 0.2) || 1;
+      for (let i = 0; i < steps; i++) {
+        moveAxis('x', vx * dt / steps);
+        moveAxis('z', vz * dt / steps);
+        moveAxis('y', P.vy * dt / steps);
+      }
+    }
+    camera.position.set(P.x, P.y + EYE, P.z);
+    camera.rotation.set(pitch, yaw, 0);
+
+    const r = playing && raycast();
+    outline.visible = !!r;
+    if (r) outline.position.set(r.hit[0] + .5, r.hit[1] + .5, r.hit[2] + .5);
+
+    renderer.render(scene, camera);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
