@@ -299,15 +299,30 @@
   }
 
   const ov = document.getElementById('ov'), canvas = renderer.domElement;
+  // 页面不允许锁定鼠标时（比如被嵌在别的网页里），改用"按住拖动转视角"
+  let freeMouse = false, drag = null;
+  function resume() { playing = true; ov.classList.add('hidden'); }
+  function pause() {
+    playing = false; drag = null; ov.classList.remove('hidden');
+    document.getElementById('sub').textContent = '已暂停'; document.getElementById('go').textContent = '继续';
+    for (const k in keys) keys[k] = false;
+  }
+  function useFreeMouse() {
+    if (freeMouse) return;
+    freeMouse = true; resume();
+    nameEl.textContent = '按住鼠标拖动转视角，单击挖，右键放'; nameEl.style.opacity = 1;
+    clearTimeout(nameTimer); nameTimer = setTimeout(() => nameEl.style.opacity = 0, 4000);
+  }
   function startPlay() {
-    if (mobile) { playing = true; ov.classList.add('hidden'); }
-    else canvas.requestPointerLock();
+    if (mobile || freeMouse) return resume();
+    try { const r = canvas.requestPointerLock(); if (r && r.catch) r.catch(useFreeMouse); }
+    catch (e) { useFreeMouse(); }
   }
   document.getElementById('go').onclick = startPlay;
+  document.addEventListener('pointerlockerror', useFreeMouse);
   document.addEventListener('pointerlockchange', () => {
-    playing = document.pointerLockElement === canvas;
-    ov.classList.toggle('hidden', playing);
-    if (!playing) { document.getElementById('sub').textContent = '已暂停'; document.getElementById('go').textContent = '继续'; for (const k in keys) keys[k] = false; }
+    if (freeMouse) return;
+    if (document.pointerLockElement === canvas) resume(); else pause();
   });
 
   // 桌面
@@ -315,16 +330,24 @@
     keys[e.code] = true;
     if (/^Digit[1-8]$/.test(e.code)) select(+e.code.slice(5));
     if (e.code === 'Space') e.preventDefault();
+    if (e.code === 'Escape' && freeMouse && playing) pause();
   });
   document.addEventListener('keyup', e => keys[e.code] = false);
   document.addEventListener('mousemove', e => {
-    if (!playing || mobile) return;
+    if (!playing || mobile || (freeMouse && !drag)) return;
+    if (drag) drag.moved += Math.abs(e.movementX) + Math.abs(e.movementY);
     yaw -= e.movementX * 0.0025;
     pitch = Math.max(-1.55, Math.min(1.55, pitch - e.movementY * 0.0025));
   });
   canvas.addEventListener('mousedown', e => {
     if (!playing || mobile) return;
+    if (freeMouse) { drag = { b: e.button, moved: 0 }; return; }
     if (e.button === 0) breakBlock(); else if (e.button === 2) placeBlock();
+  });
+  document.addEventListener('mouseup', () => {
+    if (!drag) return;
+    const d = drag; drag = null;
+    if (d.moved < 6) { if (d.b === 0) breakBlock(); else if (d.b === 2) placeBlock(); }   // 没怎么拖动 = 单击
   });
   document.addEventListener('contextmenu', e => e.preventDefault());
   document.addEventListener('wheel', e => {
@@ -376,10 +399,7 @@
     btn('bJump', () => jumpHeld = true, () => jumpHeld = false);
     btn('bBreak', breakBlock);
     btn('bPlace', placeBlock);
-    btn('pauseBtn', () => {
-      playing = false; ov.classList.remove('hidden');
-      document.getElementById('sub').textContent = '已暂停'; document.getElementById('go').textContent = '继续';
-    });
+    btn('pauseBtn', pause);
   }
 
   // ---------- 主循环 ----------
